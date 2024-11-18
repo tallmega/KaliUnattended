@@ -19,4 +19,4 @@ To build ISO:
 
  Then when ready to write ISO to USB (its sda for me, PLEASE don't overwrite your OS disk):
  		
-	 sudo dd bs=4M if=./images/kali-linux-rolling-installer-amd64.iso of=/dev/sda status=progress oflag=sync
+	 sudo dd bs=4M if=./live-build-config/images/kali-linux-rolling-installer-amd64.iso of=/dev/sda status=progress oflag=sync
