@@ -88,3 +88,6 @@ EOL
 curl -fsSL https://tailscale.com/install.sh -o install.sh
 sh install.sh
 tailscale up --auth-key=$tsauthkey --ssh=true
+
+sudo apt-get update
+sudo apt-get upgrade -y
