@@ -2,14 +2,14 @@ late_command script file for Kali Linux installs.
 
 Preseed file should include:
 
-		d-i preseed/late_command string \
-    in-target export activation_code1="<key1>"; \
-    in-target export activation_code2="<key2>"; \
-    in-target export activation_code3="<key3>"; \
-    in-target export tsauthkey="<tskey>"; \
-    in-target wget <path to preseed_post.sh> -O /tmp/preseed_post.sh; \
-    in-target chmod +x /tmp/preseed_post.sh; \
-    in-target bash /tmp/preseed_post.sh;
+	d-i preseed/late_command string \
+	    in-target export activation_code1="<key1>"; \
+	    in-target export activation_code2="<key2>"; \
+	    in-target export activation_code3="<key3>"; \
+	    in-target export tsauthkey="<tskey>"; \
+	    in-target wget <path to preseed_post.sh> -O /tmp/preseed_post.sh; \
+	    in-target chmod +x /tmp/preseed_post.sh; \
+	    in-target bash /tmp/preseed_post.sh;
 
 To build ISO:
 
