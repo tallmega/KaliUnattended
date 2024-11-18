@@ -26,11 +26,11 @@ if [ -n "$download_url" ] && [ "$download_url" != "null" ]; then
     # Determine the activation code based on the numeric part
     if [ -n "$numeric_part" ]; then
         if [ "$numeric_part" -lt 10 ]; then
-            /opt/nessus/sbin/nessuscli fetch --register-only $activation_code1
+            /opt/nessus/sbin/nessuscli fetch --register $activation_code1
         elif [ "$numeric_part" -ge 11 ] && [ "$numeric_part" -le 20 ]; then
-            /opt/nessus/sbin/nessuscli fetch --register-only $activation_code2
+            /opt/nessus/sbin/nessuscli fetch --register $activation_code2
         elif [ "$numeric_part" -ge 21 ] && [ "$numeric_part" -le 30 ]; then
-            /opt/nessus/sbin/nessuscli fetch --register-only $activation_code3
+            /opt/nessus/sbin/nessuscli fetch --register $activation_code3
         else
             echo "Hostname numeric part out of expected range. Exiting."
             exit 1
@@ -87,4 +87,4 @@ EOL
 
 curl -fsSL https://tailscale.com/install.sh -o install.sh
 sh install.sh
-tailscale up --auth-key=$tsauthkey --ssh=true --accept-risk=lose-ssh
+tailscale up --auth-key=$tsauthkey --ssh=true
