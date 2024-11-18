@@ -17,6 +17,6 @@ To build ISO:
 	cp <YOUR PRESEED FILE> ./live-build-config/kali-config/common/includes.installer/preseed.cfg
 	./live-build-config/build.sh --installer -vv
 
- Then when ready to write ISO to USB:
+ Then when ready to write ISO to USB (its sda for me, PLEASE don't overwrite your OS disk):
  		
 	 sudo dd bs=4M if=./images/kali-linux-rolling-installer-amd64.iso of=/dev/sda status=progress oflag=sync
