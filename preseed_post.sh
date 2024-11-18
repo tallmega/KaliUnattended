@@ -66,8 +66,8 @@ if [ -n "$download_url" ] && [ "$download_url" != "null" ]; then
     echo -e "Nessus\nNessus\ny\n\ny\n\n" | /opt/nessus/sbin/nessuscli adduser Nessus
 
     # Start and enable the Nessus service
-    sudo systemctl start nessusd
-    sudo systemctl enable nessusd
+    systemctl start nessusd
+    systemctl enable nessusd
 
     # Clean up
     rm Nessus.deb
