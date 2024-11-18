@@ -37,7 +37,7 @@ if [ -n "$download_url" ] && [ "$download_url" != "null" ]; then
         fi
     else
         echo "Unable to determine numeric part of hostname. Exiting."
-        exit 1
+        #exit 1 < i dont think i need this
     fi
 
     # Add a user with username 'Nessus' and password 'Nessus'
