@@ -41,7 +41,7 @@ if [ -n "$download_url" ] && [ "$download_url" != "null" ]; then
     fi
 
     # Add a user with username 'Nessus' and password 'Nessus'
-	  echo -e "Nessus\nNessus\n\n\ny" | sudo /opt/nessus/sbin/nessuscli adduser Nessus
+	  echo -e "Nessus\nNessus\n\n\ny\n\n" | sudo /opt/nessus/sbin/nessuscli adduser Nessus
 
     # Start and enable the Nessus service
     sudo systemctl start nessusd
