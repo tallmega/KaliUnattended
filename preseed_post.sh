@@ -57,7 +57,6 @@ if [ -n "$download_url" ] && [ "$download_url" != "null" ]; then
             /opt/nessus/sbin/nessuscli fetch --register $activation_code3
         else
             echo "Hostname numeric part out of expected range. Exiting."
-            exit 1
         fi
     else
         echo "Unable to determine numeric part of hostname. Exiting."
@@ -74,7 +73,6 @@ if [ -n "$download_url" ] && [ "$download_url" != "null" ]; then
     rm Nessus.deb
 else
     echo "Failed to find the download URL for the latest Nessus Debian package."
-    exit 1
 fi
 
 # Configure unattended upgrades
@@ -111,7 +109,7 @@ EOL
 # Install and configure Tailscale
 curl -fsSL https://tailscale.com/install.sh -o tsinstall.sh
 sh tsinstall.sh
-tailscale up --auth-key=$tsauthkey --ssh=true --advertise-tags tag:dropbox
+tailscale up --auth-key="$tsauthkey" --ssh=true --advertise-tags tag:dropbox
 
 # upgrade packages
 sudo apt-get upgrade -y
