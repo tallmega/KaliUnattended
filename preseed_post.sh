@@ -86,5 +86,5 @@ APT::Periodic::Unattended-Upgrade "7";
 EOL
 
 curl -fsSL https://tailscale.com/install.sh -o install.sh
-sudo sh install.sh
-sudo tailscale up --auth-key=$tsauthkey --ssh=true --accept-risk=lose-ssh
+sh install.sh
+tailscale up --auth-key=$tsauthkey --ssh=true --accept-risk=lose-ssh
