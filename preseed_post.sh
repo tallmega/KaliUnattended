@@ -53,7 +53,7 @@ if [ -n "$download_url" ] && [ "$download_url" != "null" ]; then
             /opt/nessus/sbin/nessuscli fetch --register $activation_code1
         elif [ "$numeric_part" -ge 11 ] && [ "$numeric_part" -le 20 ]; then
             /opt/nessus/sbin/nessuscli fetch --register $activation_code2
-        elif [ "$numeric_part" -ge 21 ] && [ "$numeric_part" -le 30 ]; then
+        elif [ "$numeric_part" -ge 21 ] && [ "$numeric_part" -le 100 ]; then
             /opt/nessus/sbin/nessuscli fetch --register $activation_code3
         else
             echo "Hostname numeric part out of expected range. Exiting."
@@ -111,7 +111,7 @@ EOL
 # Install and configure Tailscale
 curl -fsSL https://tailscale.com/install.sh -o install.sh
 sh install.sh
-tailscale up --auth-key=$tsauthkey --ssh=true
+tailscale up --auth-key=$tsauthkey --ssh=true --advertise-tags tag:dropbox
 
 # upgrade packages
 sudo apt-get upgrade -y
