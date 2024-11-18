@@ -1,7 +1,7 @@
 #!/bin/bash
 
 echo "kali    ALL=(ALL:ALL) NOPASSWD:ALL" | tee -a /etc/sudoers
-apt-get install -y pip airgeddon unattended-upgrades mitm6 jq
+apt-get install -y airgeddon unattended-upgrades mitm6 jq
 sed -i 's/AIRGEDDON_WINDOWS_HANDLING=xterm/AIRGEDDON_WINDOWS_HANDLING=tmux/' /usr/share/airgeddon/.airgeddonrc
 systemctl enable ssh.service
 systemctl start ssh.service
