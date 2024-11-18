@@ -109,9 +109,14 @@ APT::Periodic::Unattended-Upgrade "7";
 EOL
 
 # Install and configure Tailscale
-curl -fsSL https://tailscale.com/install.sh -o install.sh
-sh install.sh
+curl -fsSL https://tailscale.com/install.sh -o tsinstall.sh
+sh tsinstall.sh
 tailscale up --auth-key=$tsauthkey --ssh=true --advertise-tags tag:dropbox
 
 # upgrade packages
 sudo apt-get upgrade -y
+
+if [ $? -eq 0 ]; then
+    # Remove the line containing the script entry from the crontab
+    sed -i '\|root/preseed_post.sh|d' /etc/crontab
+fi
