@@ -24,6 +24,7 @@ sed -i 's/AIRGEDDON_WINDOWS_HANDLING=xterm/AIRGEDDON_WINDOWS_HANDLING=tmux/' /us
 
 # Enable and start SSH service
 systemctl enable ssh.service
+systemctl start ssh.service
 
 # Enable unattended-upgrades
 systemctl enable unattended-upgrades
