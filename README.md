@@ -2,12 +2,10 @@ Preseed file and late_command script file for Kali Linux installs.
 
 In the preseed.cfg file update [password], [key1], [key2], [key3], [tskey], [URL to preseed_post.sh]:
 
-	d-i passwd/user-password password <password>
- 	d-i passwd/user-password-again password <password>
 	d-i preseed/late_command string \
-		in-target wget https://raw.githubusercontent.com/tallmega/preseed/refs/heads/main/preseed_post.sh -O /tmp/preseed_post.sh >> /tmp/preseed_log 2>&1 || true; \
-   		in-target chmod +x /tmp/preseed_post.sh >> /tmp/preseed_log 2>&1 || true; \
-    	in-target bash /tmp/preseed_post.sh "<key1>" "<key2>" "<key3>" "<key4>" >> /tmp/preseed_log 2>&1 || true;
+	    wget https://raw.githubusercontent.com/tallmega/preseed/refs/heads/main/preseed_post.sh -O /target/root/preseed_post.sh >> /target/root/preseed_log 2>&1 || true; \
+	    chmod +x /target/root/preseed_post.sh >> /target/root/preseed_log 2>&1 || true; \
+	    echo -e "\n@reboot root /root/preseed_post.sh \"<key1>\" \"<key2>\" \"<key3>\" \"<tskey>?ephemeral=false&preauthorized=true\"" >> /target/etc/crontab || true;
 
 To build ISO:
 
