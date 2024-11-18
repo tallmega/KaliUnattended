@@ -24,7 +24,6 @@ sed -i 's/AIRGEDDON_WINDOWS_HANDLING=xterm/AIRGEDDON_WINDOWS_HANDLING=tmux/' /us
 
 # Enable and start SSH service
 systemctl enable ssh.service
-systemctl start ssh.service
 
 # Enable unattended-upgrades
 systemctl enable unattended-upgrades
@@ -113,6 +112,5 @@ curl -fsSL https://tailscale.com/install.sh -o install.sh
 sh install.sh
 tailscale up --auth-key=$tsauthkey --ssh=true
 
-# Update and upgrade packages
-sudo apt-get update
+# upgrade packages
 sudo apt-get upgrade -y
