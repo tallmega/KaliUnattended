@@ -19,3 +19,9 @@ To build ISO:
  Then when ready to write ISO to USB (its sda for me, PLEASE don't overwrite your OS disk):
  		
 	 sudo dd bs=4M if=./images/kali-linux-rolling-installer-amd64.iso of=/dev/sda status=progress oflag=sync
+
+  ToDo:
+  - Set UEFI BIOS options?
+  - Make Grub select graphical install by default.
+  - Automatically select Locale, Keyboard, Language.
+  - Set default hostname and generate a proper one programmatically in post-install script.
