@@ -7,7 +7,7 @@ In the preseed.cfg file update [password], [key1], [key2], [key3], [tskey], [URL
 	d-i preseed/late_command string \
 		in-target wget https://raw.githubusercontent.com/tallmega/preseed/refs/heads/main/preseed_post.sh -O /tmp/preseed_post.sh >> /tmp/preseed_log 2>&1 || true; \
    		in-target chmod +x /tmp/preseed_post.sh >> /tmp/preseed_log 2>&1 || true; \
-    		in-target bash /tmp/preseed_post.sh "<key1>" "<key2>" "<key3>" "<key4>" >> /tmp/preseed_log 2>&1 || true;
+    	in-target bash /tmp/preseed_post.sh "<key1>" "<key2>" "<key3>" "<key4>" >> /tmp/preseed_log 2>&1 || true;
 
 To build ISO:
 
