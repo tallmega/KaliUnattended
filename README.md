@@ -13,11 +13,11 @@ Preseed file should include:
 
 To build ISO:
 
-    sudo apt update
-    sudo apt install -y git live-build cdebootstrap devscripts simple-cdd
-    git clone https://gitlab.com/kalilinux/build-scripts/live-build-config.git
-		cp <YOUR PRESEED FILE> ./live-build-config/kali-config/common/includes.installer/
-		./build.sh --installer -vv
+	sudo apt update
+	sudo apt install -y git live-build cdebootstrap devscripts simple-cdd
+	git clone https://gitlab.com/kalilinux/build-scripts/live-build-config.git
+	cp <YOUR PRESEED FILE> ./live-build-config/kali-config/common/includes.installer/
+	./build.sh --installer -vv
 
  Then when ready to write ISO to USB:
  		
