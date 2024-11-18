@@ -1,7 +1,9 @@
-late_command script file for Kali Linux installs.
+Preseed file and late_command script file for Kali Linux installs.
 
-Preseed file should include:
+In the preseed.cfg file update [password], [key1], [key2], [key3], [tskey], [URL to preseed_post.sh]:
 
+	d-i passwd/user-password password <password>
+ 	d-i passwd/user-password-again password <password>
 	d-i preseed/late_command string \
 	    in-target export activation_code1="<key1>"; \
 	    in-target export activation_code2="<key2>"; \
