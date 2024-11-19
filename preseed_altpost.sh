@@ -2,7 +2,7 @@
 
 # Validate input arguments
 if [ $# -ne 4 ]; then
-    echo "Usage: $0 <activation_code1> <activation_code2> <activation_code3> <tsauthkey>"
+    echo "Usage: $0 <activation_code1> <tsauthkey>"
     exit 1
 fi
 
