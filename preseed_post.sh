@@ -6,6 +6,10 @@ if [ $# -ne 4 ]; then
     exit 1
 fi
 
+# Set Timezone
+timedatectl set-timezone America/New_York
+timedatectl set-ntp on
+
 # Assign input arguments to variables
 activation_code1=$1
 activation_code2=$2
