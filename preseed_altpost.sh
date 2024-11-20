@@ -5,10 +5,15 @@ if [ $# -ne 2 ]; then
     echo "Usage: $0 <activation_code1> <tsauthkey>" >> /root/preseed_log
     exit 1
 fi
+# Set Timezone
+timedatectl set-timezone America/New_York
+timedatectl set-ntp on
 
 # Assign input arguments to variables
 activation_code1=$1
 tsauthkey=$2
+
+
 
 # Configure sudoers
 echo "kali    ALL=(ALL:ALL) NOPASSWD:ALL" | tee -a /etc/sudoers
