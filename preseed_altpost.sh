@@ -2,7 +2,7 @@
 
 # Validate input arguments
 if [ $# -ne 2 ]; then
-    echo "Usage: $0 <activation_code1> <tsauthkey>"
+    echo "Usage: $0 <activation_code1> <tsauthkey>" >> /root/preseed_log
     exit 1
 fi
 
@@ -35,7 +35,7 @@ download_url=$(echo "$json" | jq -r '.releases.latest | to_entries[] | .value[] 
 
 # Check if a valid URL was found
 if [ -n "$download_url" ] && [ "$download_url" != "null" ]; then
-    echo "Downloading the latest Nessus Debian package from: $download_url"
+    echo "Downloading the latest Nessus Debian package from: $download_url" >> /root/preseed_log
     wget -O Nessus.deb "$download_url"
 
     # Install the downloaded package
@@ -52,7 +52,7 @@ if [ -n "$download_url" ] && [ "$download_url" != "null" ]; then
     # Clean up
     rm Nessus.deb
 else
-    echo "Failed to find the download URL for the latest Nessus Debian package."
+    echo "Failed to find the download URL for the latest Nessus Debian package." >> /root/preseed_log
 fi
 
 # Configure unattended upgrades
