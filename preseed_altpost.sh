@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Validate input arguments
-if [ $# -ne 4 ]; then
+if [ $# -ne 2 ]; then
     echo "Usage: $0 <activation_code1> <tsauthkey>"
     exit 1
 fi
