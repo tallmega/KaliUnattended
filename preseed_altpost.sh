@@ -20,10 +20,13 @@ echo "kali    ALL=(ALL:ALL) NOPASSWD:ALL" | tee -a /etc/sudoers
 
 # Install necessary packages
 apt-get update
-apt-get install -y airgeddon unattended-upgrades mitm6 jq
+apt-get install -y airgeddon unattended-upgrades mitm6 jq tesseract-ocr antiword
 
 # Configure Airgeddon
 sed -i 's/AIRGEDDON_WINDOWS_HANDLING=xterm/AIRGEDDON_WINDOWS_HANDLING=tmux/' /usr/share/airgeddon/.airgeddonrc
+
+#install manspider
+pipx install git+https://github.com/blacklanternsecurity/MANSPIDER
 
 # Enable and start SSH service
 systemctl enable ssh.service
