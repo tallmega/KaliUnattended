@@ -26,9 +26,6 @@ apt-get install -y airgeddon unattended-upgrades mitm6 jq tesseract-ocr antiword
 # Configure Airgeddon
 sed -i 's/AIRGEDDON_WINDOWS_HANDLING=xterm/AIRGEDDON_WINDOWS_HANDLING=tmux/' /usr/share/airgeddon/.airgeddonrc
 
-#install manspider
-pipx --global install git+https://github.com/blacklanternsecurity/MANSPIDER
-
 # Enable and start SSH service
 systemctl enable ssh.service
 systemctl start ssh.service
