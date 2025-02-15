@@ -24,7 +24,7 @@ echo "kali    ALL=(ALL:ALL) NOPASSWD:ALL" | tee -a /etc/sudoers
 
 # Install necessary packages
 apt-get update
-apt-get install -y airgeddon unattended-upgrades mitm6 jq tesseract-ocr antiword
+apt-get install -y airgeddon unattended-upgrades mitm6 jq tesseract-ocr antiword fzf
 
 # Configure Airgeddon
 sed -i 's/AIRGEDDON_WINDOWS_HANDLING=xterm/AIRGEDDON_WINDOWS_HANDLING=tmux/' /usr/share/airgeddon/.airgeddonrc
