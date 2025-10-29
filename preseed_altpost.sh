@@ -23,7 +23,7 @@ wget https://raw.githubusercontent.com/tallmega/KaliUnattended/refs/heads/main/l
 echo "kali    ALL=(ALL:ALL) NOPASSWD:ALL" | tee -a /etc/sudoers
 
 # Install necessary packages
-apt-get update
+apt-get update 
 apt-get install -y airgeddon unattended-upgrades mitm6 jq tesseract-ocr antiword fzf
 
 # Configure Airgeddon
@@ -64,6 +64,9 @@ else
     echo "Failed to find the download URL for the latest Nessus Debian package." >> /root/preseed_log
 fi
 
+# upgrade packages
+sudo apt-get -o Dpkg::Options::='--force-confold' --force-yes -fuy upgrade
+
 # Configure unattended upgrades
 
 # Uncomment "origin=Debian,codename=${distro_codename}-updates";
@@ -99,9 +102,6 @@ EOL
 curl -fsSL https://tailscale.com/install.sh -o tsinstall.sh
 sh tsinstall.sh
 tailscale up --auth-key="$tsauthkey" --ssh=true --advertise-tags tag:dropbox
-
-# upgrade packages
-sudo apt-get upgrade -y
 
 if [ $? -eq 0 ]; then
     # Remove the line containing the script entry from the crontab
