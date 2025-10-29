@@ -65,7 +65,7 @@ else
 fi
 
 # upgrade packages
-sudo apt-get -o Dpkg::Options::='--force-confold' --force-yes -fuy upgrade
+sudo apt-get -o Dpkg::Options::='--force-confold' -fuy upgrade
 
 # Configure unattended upgrades
 
