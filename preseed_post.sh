@@ -18,9 +18,9 @@ activation_code3=$3
 tsauthkey=$4
 
 # fix keys
-mkdir -p /usr/share/keyrings
-wget https://archive.kali.org/archive-keyring.gpg -O /usr/share/keyrings/kali-archive-keyring.gpg
-apt update
+#mkdir -p /usr/share/keyrings
+#wget https://archive.kali.org/archive-keyring.gpg -O /usr/share/keyrings/kali-archive-keyring.gpg
+#apt update
 
 # add logon script
 wget https://raw.githubusercontent.com/tallmega/KaliUnattended/refs/heads/main/logon-script.sh -O /etc/profile.d/logon-script.sh
