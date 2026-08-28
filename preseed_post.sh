@@ -119,6 +119,10 @@ APT::Periodic::AutocleanInterval "7";
 APT::Periodic::Unattended-Upgrade "7";
 EOL
 
+# Ensure root filesystem is remounted read-write during boot
+systemctl add-wants local-fs.target systemd-remount-fs.service
+systemctl daemon-reload
+
 # Install and configure Tailscale
 curl -fsSL https://tailscale.com/install.sh -o tsinstall.sh
 sh tsinstall.sh
