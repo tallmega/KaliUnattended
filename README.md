@@ -1,132 +1,52 @@
-## 1. Build Machine Requirements
+# Repeatable Kali installs from Windows
 
-Use a real Debian or Kali Linux system.
+Prepare one USB on Windows, then use it to install any number of machines. The USB runs the **full Kali Installer ISO**, whose installer kernel and driver modules match each other. Near the end of each installation, the installed system downloads the current `kali-rolling` kernel and runs a full upgrade. The next boot uses that newly installed kernel. You can keep using the USB later without rebuilding it just to follow Kali kernel updates.
 
-Do **not** use WSL.
+The older `preseed.cfg` and netboot workflow are not used by this process. Netboot can fail when its installer kernel no longer matches the modules on a rolling mirror.
 
-```bash
-sudo apt update
-sudo apt install -y wget cpio gzip xorriso grub-efi-amd64-bin grub-pc-bin mtools
-```
+## Prepare the USB once
 
----
+Do this on a Windows computer with this repository, Rufus, and an 8 GB or larger USB drive. **Writing the ISO erases the USB.** The eventual Kali installation also erases the first NVMe disk selected by the preseed.
 
-## 2. Create Working Directory
+1. Download the **Installer** amd64 ISO from [Kali's official download page](https://www.kali.org/get-kali/). Choose Installer rather than NetInstaller or Live.
+2. Insert the USB, open Rufus, select that USB under **Device**, select the downloaded ISO under **Boot selection**, and click **Start**. If Rufus asks between **ISO Image mode** and **DD Image mode**, choose **ISO Image mode**; the preparation script needs to edit files on the USB. Confirm the USB erase prompt and wait until Rufus finishes.
+3. In File Explorer, note the USB drive letter (for example, `E:`). Check that the drive contains `E:\simple-cdd\default.preseed`, `E:\boot\grub\grub.cfg`, `E:\install.amd\vmlinuz`, and `E:\install.amd\initrd.gz`, replacing `E:` with your drive letter. These are the files `Prepare-Usb.ps1` expects; if they are missing, check that you used the full amd64 Installer ISO in ISO Image mode.
+4. Open this repository folder in File Explorer, type `powershell` in the address bar, and press Enter. Create the two local configuration files:
 
-```
-mkdir -p ~/kali-netboot-preseed
-cd ~/kali-netboot-preseed
-```
+   ```powershell
+   Copy-Item .\preseed_installer.cfg .\preseed_installer.local.cfg
+   Copy-Item .\deployment.env.example .\deployment.env
+   notepad .\preseed_installer.local.cfg
+   notepad .\deployment.env
+   ```
 
----
+  In `preseed_installer.local.cfg`, replace both `changeme` password placeholders with the same Kali user password. Review the `partman/early_command` disk selection: it takes the first `/dev/nvme` disk and **erases it during installation**. Change that command if your intended target is different. In `deployment.env`, replace all four `replace-me` values with your three Nessus activation codes and Tailscale auth key. Keep each value inside single quotes. Both local files are ignored by Git. The password and deployment values are copied to the USB in plaintext; the deployment values also reach the installed system.
+5. Run the script from the same PowerShell window, replacing `E:\` with your USB drive root:
 
-## 3. Download Kali Netboot Installer
+   ```powershell
+   .\Prepare-Usb.ps1 -UsbRoot 'E:\'
+   ```
 
-```
-wget https://http.kali.org/kali/dists/kali-rolling/main/installer-amd64/current/images/netboot/netboot.tar.gztar -xzf netboot.tar.gz
-```
+   Wait for `USB prepared at E:\` before removing the drive. If PowerShell blocks local scripts, run `Set-ExecutionPolicy -Scope Process Bypass` in that window, then retry the command. This policy change lasts only for that PowerShell process.
+6. Confirm the USB contains `E:\preseed.cfg`, `E:\deployment\deployment.env`, and `E:\deployment\late-upgrade.sh`. Also check that `E:\boot\grub\grub.cfg` contains `Kali unattended install (hostname in installer)` and `set default=kaliunattended`. Then eject the USB in Windows. The script copies `preseed_post.sh` and `logon-script.sh` and adds an automatic UEFI boot entry that uses `/cdrom/preseed.cfg` with `auto=true priority=high`. The preseed lowers the priority to `critical` before partitioning.
 
-You should now have:
+The script leaves the ISO's original `simple-cdd/default.preseed` intact. You can edit your local preseed or credentials and rerun `Prepare-Usb.ps1` on the same USB. Keep the original ISO and a copy of this repository so you can prepare another USB later.
 
-```
-debian-installer/amd64/linuxdebian-installer/amd64/initrd.gz
-```
+## Install each machine
 
----
+1. Boot the prepared USB in UEFI mode. A short countdown starts the **Kali unattended install (hostname in installer)** entry automatically. If you interrupt the countdown, select that entry yourself. The stock **Install** entry starts Kali's interactive installer.
+2. When Kali's installer asks for the hostname, replace the suggested `CTDropbox1` with a unique name such as `CTDropbox41`, `CTDropbox57`, or `CTDropbox75`, and continue. Reuse the same USB for the next machine and enter its hostname at this installer screen. The number selects the Nessus activation code on first boot: 1–10 use the first key, 11–20 use the second key, and 21 or higher use the third key.
+3. Leave the USB connected while installation finishes. The installer uses packages on the USB for its own kernel and the base system. Its late command downloads the current Kali archive keyring, configures `kali-rolling` on the target disk, installs the current `linux-image-amd64`, and runs `apt-get full-upgrade` there. This step requires working internet access and stops the install if it fails.
+4. The machine halts when installation finishes. Remove the USB and start the machine from its internal disk. The installed kernel is the one downloaded during that machine's installation. The first-boot script then installs extra tools, Nessus, and Tailscale.
 
-## 4. Create the Preseed File
+Repeat these steps with the same USB. Kali's mirror is expected to change over time; only the **installed system** consults it, after the installer has loaded its matching drivers from the ISO. A future machine may need a newer Installer ISO if its hardware needs newer installer drivers or the old image can no longer upgrade cleanly. Prepare a USB from a newer full Installer ISO and test it on one machine in that case.
 
-Create:
+For later installs, refresh `deployment.env` if the Tailscale key or activation codes have changed, then rerun `Prepare-Usb.ps1` against the same USB. Reflashing the ISO is not needed for a credential or script change. If the USB still stops at the stock Kali installer menu or reports `Hostname "" was invalid`, rerun the updated script and check the UEFI entry in `boot\grub\grub.cfg` before booting again.
 
-```
-nano debian-installer/amd64/preseed.cfg
-```
-## 5. Embed the Preseed into the Initrd
+## Files
 
-```
-cd ~/kali-netboot-preseed/debian-installer/amd64
-gunzip initrd.gz
-echo preseed.cfg | cpio -H newc -o -A -F initrd
-gzip initrd
-```
-
-You should now have:
-
-```
-initrd.gz
-linux
-preseed.cfg
-```
-
----
-
-## 6. Build the Tiny Boot ISO
-
-Create the ISO directory:
-
-```
-mkdir -p ~/kali-netboot-iso/boot/grub
-cd ~/kali-netboot-iso
-cp ~/kali-netboot-preseed/debian-installer/amd64/linux boot/linux
-cp ~/kali-netboot-preseed/debian-installer/amd64/initrd.gz boot/initrd.gz
-```
-
-Create the GRUB config:
-
-```
-cat > boot/grub/grub.cfg <<'EOF'  
-set timeout=5  
-set default=0  
-  
-menuentry "Automated Kali Netboot Installer" {  
-linux /boot/linux auto=true auto-install/enable=true priority=high vga=788 net.ifnames=0 ---  
-initrd /boot/initrd.gz  
-}  
-EOF
-```
-
-Build the ISO:
-
-```
-grub-mkrescue -o ~/kali-netboot-preseed.iso ~/kali-netboot-iso
-```
-
----
-
-## 7. Verify the ISO Contents
-
-```
-mkdir -p /tmp/kali-netboot-checksudo mount -o loop ~/kali-netboot-preseed.iso /tmp/kali-netboot-checkcat /tmp/kali-netboot-check/boot/grub/grub.cfgls -lh /tmp/kali-netboot-check/boot/linux /tmp/kali-netboot-check/boot/initrd.gzsudo umount /tmp/kali-netboot-check
-```
-
-You should see:
-
-```
-auto=true auto-install/enable=true priority=high
-```
-
----
-
-## 8. Write the USB
-
-Identify the USB carefully:
-
-```
-lsblk
-```
-
-Set variables:
-
-```
-ISO=~/kali-netboot-preseed.isoUSB=/dev/sdX
-```
-
-Write the ISO:
-
-```
-sudo umount ${USB}?* 2>/dev/nullsudo wipefs --force -a "$USB"sudo dd if="$ISO" of="$USB" bs=8M oflag=direct conv=fsync status=progresssyncsudo cmp -n "$(stat -c%s "$ISO")" "$ISO" "$USB"
-```
-
-If `cmp` returns no output, the USB matches the ISO.
-
-Alternatively, use Rufus > GPT / UEFI
+- `preseed_installer.cfg`: full Installer preseed template; hostname prompt, local base install, online late upgrade.
+- `late-upgrade.sh`: runs inside the target system before installation finishes.
+- `preseed_post.sh`: runs on first boot for application setup.
+- `Prepare-Usb.ps1`: prepares a Rufus ISO-mode USB on Windows.
+- `preseed.cfg`: previous netboot preseed, retained for reference.

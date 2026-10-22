@@ -1,9 +1,30 @@
 #!/bin/bash
 
 
-# Validate input arguments
-if [ $# -ne 4 ]; then
-    echo "Usage: $0 <activation_code1> <activation_code2> <activation_code3> <tsauthkey>"
+# The full Installer USB copies these values to the installed system. Keep
+# argument support for systems installed with the older netboot preseed.
+if [ $# -eq 0 ]; then
+    if [ ! -r /root/deployment.env ]; then
+        echo "Missing /root/deployment.env" >&2
+        exit 1
+    fi
+    . /root/deployment.env
+    activation_code1=$ACTIVATION_CODE_1
+    activation_code2=$ACTIVATION_CODE_2
+    activation_code3=$ACTIVATION_CODE_3
+    tsauthkey=$TAILSCALE_AUTH_KEY
+elif [ $# -eq 4 ]; then
+    activation_code1=$1
+    activation_code2=$2
+    activation_code3=$3
+    tsauthkey=$4
+else
+    echo "Usage: $0 [<activation_code1> <activation_code2> <activation_code3> <tsauthkey>]" >&2
+    exit 1
+fi
+
+if [ -z "$activation_code1" ] || [ -z "$activation_code2" ] || [ -z "$activation_code3" ] || [ -z "$tsauthkey" ]; then
+    echo "Deployment credentials are incomplete" >&2
     exit 1
 fi
 
@@ -11,19 +32,15 @@ fi
 timedatectl set-timezone America/New_York
 timedatectl set-ntp on
 
-# Assign input arguments to variables
-activation_code1=$1
-activation_code2=$2
-activation_code3=$3
-tsauthkey=$4
-
 # fix keys
 #mkdir -p /usr/share/keyrings
 #wget https://archive.kali.org/archive-keyring.gpg -O /usr/share/keyrings/kali-archive-keyring.gpg
 #apt update
 
-# add logon script
-wget https://raw.githubusercontent.com/tallmega/KaliUnattended/refs/heads/main/logon-script.sh -O /etc/profile.d/logon-script.sh
+# The full Installer USB provides this script. Legacy netboot installs fetch it.
+if [ ! -s /etc/profile.d/logon-script.sh ]; then
+    wget https://raw.githubusercontent.com/tallmega/KaliUnattended/refs/heads/main/logon-script.sh -O /etc/profile.d/logon-script.sh
+fi
 
 # Configure sudoers
 echo "kali    ALL=(ALL:ALL) NOPASSWD:ALL" | tee -a /etc/sudoers
@@ -58,16 +75,16 @@ if [ -n "$download_url" ] && [ "$download_url" != "null" ]; then
 
     # Fetch the hostname and extract the numeric part
     hostname=$(hostname)
-    numeric_part=$(echo "$hostname" | grep -oE '[0-9]+')
+    numeric_part=$(printf '%s\n' "$hostname" | grep -oE '[0-9]+$')
 
     # Determine the activation code based on the numeric part
     if [ -n "$numeric_part" ]; then
-        if [ "$numeric_part" -lt 10 ]; then
+        if [ "$numeric_part" -ge 1 ] && [ "$numeric_part" -le 10 ]; then
             /opt/nessus/sbin/nessuscli fetch --register $activation_code1
         elif [ "$numeric_part" -ge 11 ] && [ "$numeric_part" -le 20 ]; then
             /opt/nessus/sbin/nessuscli fetch --register $activation_code2
-        elif [ "$numeric_part" -ge 21 ] && [ "$numeric_part" -le 100 ]; then
-            /opt/nessus/sbin/nessuscli fetch --register $activation_code3
+        elif [ "$numeric_part" -ge 21 ]; then
+            /opt/nessus/sbin/nessuscli fetch --register "$activation_code3"
         else
             echo "Hostname numeric part out of expected range. Exiting."
         fi
