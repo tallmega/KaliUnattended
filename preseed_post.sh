@@ -59,6 +59,42 @@ systemctl start ssh.service
 # Enable unattended-upgrades
 systemctl enable unattended-upgrades
 
+# Wait for Nessus to initialize its database before creating the login.
+# lsuser also makes this safe to retry on a later boot if setup was interrupted.
+nessus_cli=/opt/nessus/sbin/nessuscli
+ensure_nessus_user() {
+    local attempt users
+
+    for ((attempt = 1; attempt <= 80; attempt++)); do
+        if users=$("$nessus_cli" lsuser 2>&1) &&
+           ! printf '%s\n' "$users" | grep -Fqi 'global.db is not ready yet'; then
+            if printf '%s\n' "$users" | grep -Fxq 'Nessus'; then
+                echo "Verified Nessus account exists."
+                return 0
+            fi
+
+            # adduser prompts for password twice, administrator rights, rules,
+            # and final confirmation. Verify the result even if it exits zero.
+            if ! printf 'Nessus\nNessus\ny\n\ny\n\n' | "$nessus_cli" adduser Nessus; then
+                echo "Nessus account creation failed on attempt $attempt." >&2
+            fi
+            if users=$("$nessus_cli" lsuser 2>&1) &&
+               printf '%s\n' "$users" | grep -Fxq 'Nessus'; then
+                echo "Created and verified Nessus account."
+                return 0
+            fi
+        fi
+
+        if [ "$attempt" -lt 80 ]; then
+            echo "Waiting for Nessus database/account (attempt $attempt of 80)..."
+            sleep 15
+        fi
+    done
+
+    echo "Nessus account was not verified after 20 minutes." >&2
+    return 1
+}
+
 # Fetch the latest Nessus release JSON data
 json=$(wget -qO- https://www.tenable.com/downloads/api/v2/pages/nessus)
 
@@ -66,43 +102,45 @@ json=$(wget -qO- https://www.tenable.com/downloads/api/v2/pages/nessus)
 download_url=$(echo "$json" | jq -r '.releases.latest | to_entries[] | .value[] | select(.file | contains("debian")) | .file_url')
 
 # Check if a valid URL was found
+nessus_setup_ok=false
 if [ -n "$download_url" ] && [ "$download_url" != "null" ]; then
     echo "Downloading the latest Nessus Debian package from: $download_url"
-    wget -O Nessus.deb "$download_url"
+    if wget -O Nessus.deb "$download_url" && sudo dpkg -i Nessus.deb; then
 
-    # Install the downloaded package
-    sudo dpkg -i Nessus.deb
+        # Fetch the hostname and extract the numeric part
+        hostname=$(hostname)
+        numeric_part=$(printf '%s\n' "$hostname" | grep -oE '[0-9]+$')
 
-    # Fetch the hostname and extract the numeric part
-    hostname=$(hostname)
-    numeric_part=$(printf '%s\n' "$hostname" | grep -oE '[0-9]+$')
-
-    # Determine the activation code based on the numeric part
-    if [ -n "$numeric_part" ]; then
-        if [ "$numeric_part" -ge 1 ] && [ "$numeric_part" -le 10 ]; then
-            /opt/nessus/sbin/nessuscli fetch --register $activation_code1
-        elif [ "$numeric_part" -ge 11 ] && [ "$numeric_part" -le 20 ]; then
-            /opt/nessus/sbin/nessuscli fetch --register $activation_code2
-        elif [ "$numeric_part" -ge 21 ]; then
-            /opt/nessus/sbin/nessuscli fetch --register "$activation_code3"
+        # Determine the activation code based on the numeric part
+        if [ -n "$numeric_part" ]; then
+            if [ "$numeric_part" -ge 1 ] && [ "$numeric_part" -le 10 ]; then
+                "$nessus_cli" fetch --register "$activation_code1"
+            elif [ "$numeric_part" -ge 11 ] && [ "$numeric_part" -le 20 ]; then
+                "$nessus_cli" fetch --register "$activation_code2"
+            elif [ "$numeric_part" -ge 21 ]; then
+                "$nessus_cli" fetch --register "$activation_code3"
+            else
+                echo "Hostname numeric part out of expected range. Exiting."
+            fi
         else
-            echo "Hostname numeric part out of expected range. Exiting."
+            echo "Unable to determine numeric part of hostname. Exiting."
+        fi
+
+        # Start Nessus so its database can initialize, then create the account.
+        if systemctl enable --now nessusd && ensure_nessus_user &&
+           systemctl is-active --quiet nessusd; then
+            nessus_setup_ok=true
+        else
+            echo "Nessus setup is incomplete; the first-boot job will retry." >&2
         fi
     else
-        echo "Unable to determine numeric part of hostname. Exiting."
+        echo "Failed to download or install Nessus; the first-boot job will retry." >&2
     fi
 
-    # Add a user with username 'Nessus' and password 'Nessus'
-    echo -e "Nessus\nNessus\ny\n\ny\n\n" | /opt/nessus/sbin/nessuscli adduser Nessus
-
-    # Start and enable the Nessus service
-    systemctl start nessusd
-    systemctl enable nessusd
-
     # Clean up
-    rm Nessus.deb
+    rm -f Nessus.deb
 else
-    echo "Failed to find the download URL for the latest Nessus Debian package."
+    echo "Failed to find the Nessus Debian package URL; the first-boot job will retry." >&2
 fi
 
 # Configure unattended upgrades
@@ -145,10 +183,16 @@ curl -fsSL https://tailscale.com/install.sh -o tsinstall.sh
 sh tsinstall.sh
 tailscale up --auth-key="$tsauthkey" --ssh=true --advertise-tags tag:dropbox
 
-# upgrade packages
-sudo apt-get upgrade -y
+# Upgrade packages. Keep the boot job until the Nessus account is verified.
+upgrade_ok=false
+if sudo apt-get upgrade -y; then
+    upgrade_ok=true
+fi
 
-if [ $? -eq 0 ]; then
+if [ "$upgrade_ok" = true ] && [ "$nessus_setup_ok" = true ]; then
     # Remove the line containing the script entry from the crontab
     sed -i '\|root/preseed_post.sh|d' /etc/crontab
+else
+    echo "First-boot setup is incomplete; leaving the boot job in place." >&2
+    exit 1
 fi
