@@ -47,7 +47,7 @@ echo "kali    ALL=(ALL:ALL) NOPASSWD:ALL" | tee -a /etc/sudoers
 
 # Install necessary packages
 apt-get update
-apt-get install -y airgeddon unattended-upgrades mitm6 jq tesseract-ocr antiword fzf
+apt-get install -y airgeddon unattended-upgrades mitm6 jq tesseract-ocr antiword fzf curl python3
 
 # Configure Airgeddon
 sed -i 's/AIRGEDDON_WINDOWS_HANDLING=xterm/AIRGEDDON_WINDOWS_HANDLING=tmux/' /usr/share/airgeddon/.airgeddonrc
@@ -59,11 +59,54 @@ systemctl start ssh.service
 # Enable unattended-upgrades
 systemctl enable unattended-upgrades
 
+nessus_cli=/opt/nessus/sbin/nessuscli
+nessus_registered=/root/.nessus-activation-complete
+
+# Select the activation code from the hostname suffix. Do not register again
+# if first-boot setup has to retry after a successful registration.
+ensure_nessus_registered() {
+    local numeric_part activation_code
+
+    [ -f "$nessus_registered" ] && return 0
+    numeric_part=$(hostname -s | grep -oE '[0-9]+$') || {
+        echo 'Hostname must end in a number to select a Nessus activation code.' >&2
+        return 1
+    }
+    if [ "$numeric_part" -ge 1 ] && [ "$numeric_part" -le 10 ]; then
+        activation_code=$activation_code1
+    elif [ "$numeric_part" -ge 11 ] && [ "$numeric_part" -le 20 ]; then
+        activation_code=$activation_code2
+    elif [ "$numeric_part" -ge 21 ]; then
+        activation_code=$activation_code3
+    else
+        echo 'Hostname numeric suffix must be at least 1.' >&2
+        return 1
+    fi
+
+    "$nessus_cli" fetch --register "$activation_code" || return 1
+    touch "$nessus_registered"
+}
+
+# The local API reports ready only after the initial plugin load finishes.
+wait_for_nessus_ready() {
+    local attempt
+
+    for ((attempt = 0; attempt < 180; attempt++)); do
+        if curl -sk --max-time 5 https://127.0.0.1:8834/server/status |
+            python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(not (d.get("status") == "ready" and d.get("pluginData") is True))' 2>/dev/null; then
+            return 0
+        fi
+        sleep 10
+    done
+
+    echo 'Nessus did not finish loading plugins within 30 minutes' >&2
+    return 1
+}
+
 # Wait for Nessus to initialize its database before creating the login.
 # lsuser also makes this safe to retry on a later boot if setup was interrupted.
-nessus_cli=/opt/nessus/sbin/nessuscli
 ensure_nessus_user() {
-    local attempt users
+    local attempt users adduser_result
 
     for ((attempt = 1; attempt <= 80; attempt++)); do
         if users=$("$nessus_cli" lsuser 2>&1) &&
@@ -73,12 +116,14 @@ ensure_nessus_user() {
                 return 0
             fi
 
-            # adduser prompts for password twice, administrator rights, rules,
-            # and final confirmation. Verify the result even if it exits zero.
-            if ! printf 'Nessus\nNessus\ny\n\ny\n\n' | "$nessus_cli" adduser Nessus; then
+            # adduser needs a terminal for its prompts. Keep the transcript
+            # private because it can contain the password echoed by the pty.
+            if ! adduser_result=$(printf 'Nessus\nNessus\ny\n\ny\n' |
+                script -qec "$nessus_cli adduser Nessus" /dev/null) ||
+               [[ "$adduser_result" != *"This user will have 'system administrator' privileges"* ]] ||
+               [[ "$adduser_result" != *"User added"* ]]; then
                 echo "Nessus account creation failed on attempt $attempt." >&2
-            fi
-            if users=$("$nessus_cli" lsuser 2>&1) &&
+            elif users=$("$nessus_cli" lsuser 2>&1) &&
                printf '%s\n' "$users" | grep -Fxq 'Nessus'; then
                 echo "Created and verified Nessus account."
                 return 0
@@ -101,34 +146,17 @@ json=$(wget -qO- https://www.tenable.com/downloads/api/v2/pages/nessus)
 # Extract the download URL for the latest Debian package
 download_url=$(echo "$json" | jq -r '.releases.latest | to_entries[] | .value[] | select(.file | contains("debian")) | .file_url')
 
-# Check if a valid URL was found
 nessus_setup_ok=false
 if [ -n "$download_url" ] && [ "$download_url" != "null" ]; then
     echo "Downloading the latest Nessus Debian package from: $download_url"
     if wget -O Nessus.deb "$download_url" && sudo dpkg -i Nessus.deb; then
-
-        # Fetch the hostname and extract the numeric part
-        hostname=$(hostname)
-        numeric_part=$(printf '%s\n' "$hostname" | grep -oE '[0-9]+$')
-
-        # Determine the activation code based on the numeric part
-        if [ -n "$numeric_part" ]; then
-            if [ "$numeric_part" -ge 1 ] && [ "$numeric_part" -le 10 ]; then
-                "$nessus_cli" fetch --register "$activation_code1"
-            elif [ "$numeric_part" -ge 11 ] && [ "$numeric_part" -le 20 ]; then
-                "$nessus_cli" fetch --register "$activation_code2"
-            elif [ "$numeric_part" -ge 21 ]; then
-                "$nessus_cli" fetch --register "$activation_code3"
-            else
-                echo "Hostname numeric part out of expected range. Exiting."
-            fi
-        else
-            echo "Unable to determine numeric part of hostname. Exiting."
-        fi
-
-        # Start Nessus so its database can initialize, then create the account.
-        if systemctl enable --now nessusd && ensure_nessus_user &&
-           systemctl is-active --quiet nessusd; then
+        # Register Nessus, wait for plugins, then create its local login.
+        if ensure_nessus_registered && systemctl enable --now nessusd.service &&
+           { echo 'Waiting for the initial Nessus plugin load...'; wait_for_nessus_ready; } &&
+           ensure_nessus_user && systemctl restart nessusd.service &&
+           { echo 'Waiting for Nessus after restart...'; wait_for_nessus_ready; } &&
+           "$nessus_cli" lsuser &&
+           systemctl is-active --quiet nessusd.service; then
             nessus_setup_ok=true
         else
             echo "Nessus setup is incomplete; the first-boot job will retry." >&2
@@ -137,11 +165,11 @@ if [ -n "$download_url" ] && [ "$download_url" != "null" ]; then
         echo "Failed to download or install Nessus; the first-boot job will retry." >&2
     fi
 
-    # Clean up
     rm -f Nessus.deb
 else
     echo "Failed to find the Nessus Debian package URL; the first-boot job will retry." >&2
 fi
+unset activation_code1 activation_code2 activation_code3
 
 # Configure unattended upgrades
 
