@@ -1,29 +1,14 @@
 #!/bin/bash
 
 
-# The full Installer USB copies these values to the installed system. Keep
-# argument support for systems installed with the older netboot preseed.
-if [ $# -eq 0 ]; then
-    if [ ! -r /root/deployment.env ]; then
-        echo "Missing /root/deployment.env" >&2
-        exit 1
-    fi
-    . /root/deployment.env
-    activation_code1=$ACTIVATION_CODE_1
-    activation_code2=$ACTIVATION_CODE_2
-    activation_code3=$ACTIVATION_CODE_3
-    tsauthkey=$TAILSCALE_AUTH_KEY
-elif [ $# -eq 4 ]; then
-    activation_code1=$1
-    activation_code2=$2
-    activation_code3=$3
-    tsauthkey=$4
-else
-    echo "Usage: $0 [<activation_code1> <activation_code2> <activation_code3> <tsauthkey>]" >&2
+# The full Installer USB copies these values to the installed system.
+if [ ! -r /root/deployment.env ]; then
+    echo "Missing /root/deployment.env" >&2
     exit 1
 fi
+. /root/deployment.env
 
-if [ -z "$activation_code1" ] || [ -z "$activation_code2" ] || [ -z "$activation_code3" ] || [ -z "$tsauthkey" ]; then
+if [ -z "${TENABLE_LINK_KEY:-}" ] || [ -z "${TAILSCALE_AUTH_KEY:-}" ]; then
     echo "Deployment credentials are incomplete" >&2
     exit 1
 fi
@@ -58,118 +43,6 @@ systemctl start ssh.service
 
 # Enable unattended-upgrades
 systemctl enable unattended-upgrades
-
-nessus_cli=/opt/nessus/sbin/nessuscli
-nessus_registered=/root/.nessus-activation-complete
-
-# Select the activation code from the hostname suffix. Do not register again
-# if first-boot setup has to retry after a successful registration.
-ensure_nessus_registered() {
-    local numeric_part activation_code
-
-    [ -f "$nessus_registered" ] && return 0
-    numeric_part=$(hostname -s | grep -oE '[0-9]+$') || {
-        echo 'Hostname must end in a number to select a Nessus activation code.' >&2
-        return 1
-    }
-    if [ "$numeric_part" -ge 1 ] && [ "$numeric_part" -le 10 ]; then
-        activation_code=$activation_code1
-    elif [ "$numeric_part" -ge 11 ] && [ "$numeric_part" -le 20 ]; then
-        activation_code=$activation_code2
-    elif [ "$numeric_part" -ge 21 ]; then
-        activation_code=$activation_code3
-    else
-        echo 'Hostname numeric suffix must be at least 1.' >&2
-        return 1
-    fi
-
-    "$nessus_cli" fetch --register "$activation_code" || return 1
-    touch "$nessus_registered"
-}
-
-# The local API reports ready only after the initial plugin load finishes.
-wait_for_nessus_ready() {
-    local attempt
-
-    for ((attempt = 0; attempt < 180; attempt++)); do
-        if curl -sk --max-time 5 https://127.0.0.1:8834/server/status |
-            python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(not (d.get("status") == "ready" and d.get("pluginData") is True))' 2>/dev/null; then
-            return 0
-        fi
-        sleep 10
-    done
-
-    echo 'Nessus did not finish loading plugins within 30 minutes' >&2
-    return 1
-}
-
-# Wait for Nessus to initialize its database before creating the login.
-# lsuser also makes this safe to retry on a later boot if setup was interrupted.
-ensure_nessus_user() {
-    local attempt users adduser_result
-
-    for ((attempt = 1; attempt <= 80; attempt++)); do
-        if users=$("$nessus_cli" lsuser 2>&1) &&
-           ! printf '%s\n' "$users" | grep -Fqi 'global.db is not ready yet'; then
-            if printf '%s\n' "$users" | grep -Fxq 'Nessus'; then
-                echo "Verified Nessus account exists."
-                return 0
-            fi
-
-            # adduser needs a terminal for its prompts. Keep the transcript
-            # private because it can contain the password echoed by the pty.
-            if ! adduser_result=$(printf 'Nessus\nNessus\ny\n\ny\n' |
-                script -qec "$nessus_cli adduser Nessus" /dev/null) ||
-               [[ "$adduser_result" != *"This user will have 'system administrator' privileges"* ]] ||
-               [[ "$adduser_result" != *"User added"* ]]; then
-                echo "Nessus account creation failed on attempt $attempt." >&2
-            elif users=$("$nessus_cli" lsuser 2>&1) &&
-               printf '%s\n' "$users" | grep -Fxq 'Nessus'; then
-                echo "Created and verified Nessus account."
-                return 0
-            fi
-        fi
-
-        if [ "$attempt" -lt 80 ]; then
-            echo "Waiting for Nessus database/account (attempt $attempt of 80)..."
-            sleep 15
-        fi
-    done
-
-    echo "Nessus account was not verified after 20 minutes." >&2
-    return 1
-}
-
-# Fetch the latest Nessus release JSON data
-json=$(wget -qO- https://www.tenable.com/downloads/api/v2/pages/nessus)
-
-# Extract the download URL for the latest Debian package
-download_url=$(echo "$json" | jq -r '.releases.latest | to_entries[] | .value[] | select(.file | contains("debian")) | .file_url')
-
-nessus_setup_ok=false
-if [ -n "$download_url" ] && [ "$download_url" != "null" ]; then
-    echo "Downloading the latest Nessus Debian package from: $download_url"
-    if wget -O Nessus.deb "$download_url" && sudo dpkg -i Nessus.deb; then
-        # Register Nessus, wait for plugins, then create its local login.
-        if ensure_nessus_registered && systemctl enable --now nessusd.service &&
-           { echo 'Waiting for the initial Nessus plugin load...'; wait_for_nessus_ready; } &&
-           ensure_nessus_user && systemctl restart nessusd.service &&
-           { echo 'Waiting for Nessus after restart...'; wait_for_nessus_ready; } &&
-           "$nessus_cli" lsuser &&
-           systemctl is-active --quiet nessusd.service; then
-            nessus_setup_ok=true
-        else
-            echo "Nessus setup is incomplete; the first-boot job will retry." >&2
-        fi
-    else
-        echo "Failed to download or install Nessus; the first-boot job will retry." >&2
-    fi
-
-    rm -f Nessus.deb
-else
-    echo "Failed to find the Nessus Debian package URL; the first-boot job will retry." >&2
-fi
-unset activation_code1 activation_code2 activation_code3
 
 # Configure unattended upgrades
 
@@ -206,20 +79,48 @@ EOL
 systemctl add-wants local-fs.target systemd-remount-fs.service
 systemctl daemon-reload
 
-# Install and configure Tailscale
-curl -fsSL https://tailscale.com/install.sh -o tsinstall.sh
-sh tsinstall.sh
-tailscale up --auth-key="$tsauthkey" --ssh=true --advertise-tags tag:dropbox
+# Install and configure Tailscale before contacting Sensor Proxy.
+tailscale_setup_ok=false
+if ! command -v tailscale >/dev/null 2>&1; then
+    if curl -fsSL https://tailscale.com/install.sh -o /root/tsinstall.sh &&
+       sh /root/tsinstall.sh; then
+        rm -f /root/tsinstall.sh
+    else
+        echo 'Tailscale installation failed; first-boot setup will retry.' >&2
+    fi
+fi
+if command -v tailscale >/dev/null 2>&1; then
+    if tailscale status --json 2>/dev/null | jq -e '.BackendState == "Running"' >/dev/null; then
+        tailscale_setup_ok=true
+    elif tailscale up --auth-key="$TAILSCALE_AUTH_KEY" --ssh=true --advertise-tags tag:dropbox; then
+        tailscale_setup_ok=true
+    fi
+fi
 
-# Upgrade packages. Keep the boot job until the Nessus account is verified.
+nessus_setup_ok=false
+if [ "$tailscale_setup_ok" = true ] &&
+   TENABLE_LINK_KEY="$TENABLE_LINK_KEY" /root/install-nessus.sh; then
+    nessus_setup_ok=true
+else
+    echo 'Nessus setup is incomplete; the first-boot job will retry.' >&2
+fi
+unset TENABLE_LINK_KEY TAILSCALE_AUTH_KEY
+
+# Upgrade packages. Keep the boot job until the managed scanner is verified.
 upgrade_ok=false
 if sudo apt-get upgrade -y; then
     upgrade_ok=true
 fi
 
-if [ "$upgrade_ok" = true ] && [ "$nessus_setup_ok" = true ]; then
+if [ "$upgrade_ok" = true ] && [ "$tailscale_setup_ok" = true ] &&
+   [ "$nessus_setup_ok" = true ]; then
     # Remove the line containing the script entry from the crontab
-    sed -i '\|root/preseed_post.sh|d' /etc/crontab
+    if sed -i '\|root/preseed_post.sh|d' /etc/crontab; then
+        rm -f /root/deployment.env
+    else
+        echo 'Could not remove the first-boot job; leaving deployment credentials for retry.' >&2
+        exit 1
+    fi
 else
     echo "First-boot setup is incomplete; leaving the boot job in place." >&2
     exit 1

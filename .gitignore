@@ -1,2 +1,3 @@
 deployment.env
 preseed_installer.local.cfg
+sensorproxy-ca.pem

@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$UsbRoot,
     [string]$PreseedPath = (Join-Path $PSScriptRoot 'preseed_installer.local.cfg'),
-    [string]$SecretsPath = (Join-Path $PSScriptRoot 'deployment.env')
+    [string]$SecretsPath = (Join-Path $PSScriptRoot 'deployment.env'),
+    [string]$SensorProxyCaPath = (Join-Path $PSScriptRoot 'sensorproxy-ca.pem')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -16,15 +17,20 @@ $defaultPreseed = Join-Path $root 'simple-cdd/default.preseed'
 $grubConfig = Join-Path $root 'boot/grub/grub.cfg'
 $installerKernel = Join-Path $root 'install.amd/vmlinuz'
 $installerInitrd = Join-Path $root 'install.amd/initrd.gz'
-$required = @($defaultPreseed, $grubConfig, $installerKernel, $installerInitrd, $PreseedPath, $SecretsPath)
+$required = @($defaultPreseed, $grubConfig, $installerKernel, $installerInitrd, $PreseedPath, $SecretsPath, $SensorProxyCaPath)
 foreach ($path in $required) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-        throw "Missing $path. Use the full amd64 Installer ISO in Rufus ISO Image mode."
+        throw "Missing $path. Check the full amd64 Installer ISO and the local deployment files."
     }
 }
 
 $preseed = Convert-ToLf ([System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $PreseedPath).Path))
 $secrets = Convert-ToLf ([System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $SecretsPath).Path))
+$sensorProxyCa = Convert-ToLf ([System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $SensorProxyCaPath).Path))
+if ($sensorProxyCa -notmatch '-----BEGIN CERTIFICATE-----[\s\S]+-----END CERTIFICATE-----' -or
+    $sensorProxyCa -match '-----BEGIN (?:[A-Z ]* )?PRIVATE KEY-----') {
+    throw 'SensorProxyCaPath must contain the public Sensor Proxy CA certificate and no private key.'
+}
 # Older local preseeds set an empty hostname. Supply a valid default, then
 # clear its seen flag so netcfg asks for the hostname inside the installer.
 $preseed = [regex]::Replace($preseed, '(?m)^d-i netcfg/(?:get_hostname|hostname) (?:string[ \t]*(?:CTDropbox1|CTDropbox)?|seen false[ \t]*)\n', '')
@@ -44,18 +50,21 @@ $passwordAgain = [regex]::Match($preseed, '(?m)^d-i passwd/user-password-again p
 if (-not $password -or $password -eq 'changeme' -or $password -ne $passwordAgain) {
     throw 'Set the same non-default Kali user password in both lines of your local preseed copy.'
 }
-foreach ($setting in @('d-i apt-setup/use_mirror boolean false', 'd-i pkgsel/upgrade select none', 'in-target /bin/sh /root/late-upgrade.sh')) {
+foreach ($setting in @('d-i apt-setup/use_mirror boolean false', 'd-i pkgsel/upgrade select none', 'in-target /bin/sh /root/late-upgrade.sh', 'cp /cdrom/deployment/install-nessus.sh /target/root/install-nessus.sh', 'cp /cdrom/deployment/sensorproxy-ca.pem /target/etc/nessus-sensor-proxy-ca.pem')) {
     if (-not $preseed.Contains($setting)) {
         throw "The selected preseed is missing: $setting"
     }
 }
-foreach ($name in @('ACTIVATION_CODE_1', 'ACTIVATION_CODE_2', 'ACTIVATION_CODE_3', 'TAILSCALE_AUTH_KEY')) {
+foreach ($name in @('TENABLE_LINK_KEY', 'TAILSCALE_AUTH_KEY')) {
     if ($secrets -notmatch "(?m)^$name='[^']+'[ \t]*$") {
         throw "Set $name as a single-quoted value in deployment.env."
     }
 }
 if ($secrets -match 'replace-me') {
     throw 'Replace every placeholder in deployment.env before preparing the USB.'
+}
+if ($secrets -notmatch "(?m)^TENABLE_LINK_KEY='[A-Za-z0-9]{64}'[ \t]*$") {
+    throw 'TENABLE_LINK_KEY must be the current 64-character Tenable VM scanner linking key.'
 }
 
 $needle = 'preseed/file=/cdrom/simple-cdd/default.preseed'
@@ -87,11 +96,12 @@ $utf8 = [System.Text.UTF8Encoding]::new($false)
 
 $deployment = Join-Path $root 'deployment'
 New-Item -ItemType Directory -Path $deployment -Force | Out-Null
-foreach ($name in @('late-upgrade.sh', 'preseed_post.sh', 'logon-script.sh')) {
+foreach ($name in @('late-upgrade.sh', 'preseed_post.sh', 'install-nessus.sh', 'logon-script.sh')) {
     $scriptText = Convert-ToLf ([System.IO.File]::ReadAllText((Join-Path $PSScriptRoot $name)))
     [System.IO.File]::WriteAllText((Join-Path $deployment $name), $scriptText, $utf8)
 }
 [System.IO.File]::WriteAllText((Join-Path $deployment 'deployment.env'), $secrets.TrimEnd() + "`n", $utf8)
+[System.IO.File]::WriteAllText((Join-Path $deployment 'sensorproxy-ca.pem'), $sensorProxyCa.TrimEnd() + "`n", $utf8)
 
 $configFiles = @(Get-ChildItem -LiteralPath (Join-Path $root 'boot/grub') -Filter '*.cfg' -File -Recurse)
 $isolinux = Join-Path $root 'isolinux'
